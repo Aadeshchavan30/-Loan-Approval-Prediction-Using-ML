@@ -1,0 +1,99 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# For handling outliers
+from scipy import stats
+
+# Assuming the dataset is a CSV file
+df = pd.read_csv('loan_data.csv')
+
+# Display basic information
+print(df.info())
+print(df.describe())
+
+# Imputation of missing values
+imputer = SimpleImputer(strategy='mean')
+df['Credit_Score'] = imputer.fit_transform(df[['Credit_Score']])
+df['Employment_Years'] = imputer.fit_transform(df[['Employment_Years']])
+
+# Optional: Drop rows with missing target values
+df = df.dropna(subset=['Loan_Approval_Status'])
+
+# Detecting outliers using Z-score
+z_scores = np.abs(stats.zscore(df[['Credit_Score', 'Employment_Years', 'Loan_Amount']]))
+df = df[(z_scores < 3).all(axis=1)]
+
+scaler = StandardScaler()
+df[['Credit_Score', 'Employment_Years', 'Loan_Amount']] = scaler.fit_transform(df[['Credit_Score', 'Employment_Years', 'Loan_Amount']])
+
+# Features and target variable
+X = df[['Credit_Score', 'Employment_Years', 'Loan_Amount', 'Income']]
+y = df['Loan_Approval_Status']
+
+# Splitting the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Logistic Regression Model
+logistic_model = LogisticRegression()
+logistic_model.fit(X_train, y_train)
+
+# Predictions
+y_pred_logistic = logistic_model.predict(X_test)
+
+# Evaluation
+logistic_accuracy = accuracy_score(y_test, y_pred_logistic)
+print(f'Logistic Regression Accuracy: {logistic_accuracy}')
+print(confusion_matrix(y_test, y_pred_logistic))
+print(classification_report(y_test, y_pred_logistic))
+
+# Random Forest Model
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+
+# Predictions
+y_pred_rf = rf_model.predict(X_test)
+
+# Evaluation
+rf_accuracy = accuracy_score(y_test, y_pred_rf)
+print(f'Random Forest Accuracy: {rf_accuracy}')
+print(confusion_matrix(y_test, y_pred_rf))
+print(classification_report(y_test, y_pred_rf))
+
+
+# Comparing the models
+models = pd.DataFrame({
+    'Model': ['Logistic Regression', 'Random Forest'],
+    'Accuracy': [logistic_accuracy, rf_accuracy]
+})
+print(models)
+
+# Visualizing the accuracy comparison
+sns.barplot(x='Model', y='Accuracy', data=models)
+plt.title('Model Accuracy Comparison')
+plt.show()
+
+import joblib
+
+# Save the best model
+if rf_accuracy > logistic_accuracy:
+    joblib.dump(rf_model, 'loan_approval_model_rf.pkl')
+    print('Random Forest model saved as loan_approval_model_rf.pkl')
+else:
+    joblib.dump(logistic_model, 'loan_approval_model_logistic.pkl')
+    print('Logistic Regression model saved as loan_approval_model_logistic.pkl')
+
+
+# Load the model and make predictions on new data
+loaded_model = joblib.load('loan_approval_model_rf.pkl')
+new_data = [[700, 5, 50000, 60000]]  # Example new data
+new_data = scaler.transform(new_data)
+prediction = loaded_model.predict(new_data)
+print(f'Loan Approval Prediction: {prediction[0]}')
